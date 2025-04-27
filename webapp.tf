@@ -287,3 +287,17 @@ resource "aws_networkfirewall_rule_group" "stateful_rule_group" {
     Name = "Web-App-StatefulRules"
   }
 }
+# Dodanie application Load Balancer'a
+resource "aws_lb" "web_app_lb" {
+  name               = "web-app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.lb_sg.id]
+  subnets            = ["subnet-09d4821994bfbefb0"] # publiczna podsieć
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "Web-App-LoadBalancer"
+  }
+}
