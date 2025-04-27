@@ -228,3 +228,62 @@ resource "aws_security_group" "lb_sg" {
     Name = "ALB-SecurityGroup"
   }
 }
+# Grupa reguł Firewall
+resource "aws_networkfirewall_rule_group" "stateless_rule_group" {
+  capacity = 100
+  name     = "web-app-stateless-rule-group"
+  type     = "STATELESS"
+
+  rule_group {
+    rules_source {
+      stateless_rules_and_custom_actions {
+        stateless_rule {
+          priority = 100
+          rule_definition {
+            match_attributes {
+              destination_port {
+                from_port = 443
+                to_port   = 443
+              }
+              protocols = [6] # TCP
+            }
+            actions = ["aws:forward_to_sfe"]
+          }
+        }
+      }
+    }
+  }
+
+  tags = {
+    Name = "Web-App-StatelessRules"
+  }
+}
+
+resource "aws_networkfirewall_rule_group" "stateful_rule_group" {
+  capacity = 100
+  name     = "web-app-stateful-rule-group"
+  type     = "STATEFUL"
+
+  rule_group {
+    rules_source {
+      stateful_rule {
+        action = "DROP"
+        header {
+          protocol        = "TCP"
+          source          = "10.0.0.0/16"
+          source_port     = "ANY"
+          destination     = "10.0.1.0/24"
+          destination_port = "ANY"
+          direction       = "FORWARD"
+        }
+        rule_option {
+          keyword = "sid:1" # Przykładowa opcja z unikalnym identyfikatorem
+        }
+      }
+    }
+  }
+
+  tags = {
+    Name = "Web-App-StatefulRules"
+  }
+}
