@@ -175,3 +175,115 @@ resource "aws_wafv2_web_acl" "web_acl" {
     Name = "Web-App-WAF"
   }
 }
+# Powiązanie WAFv2 z Application Load Balancer
+resource "aws_wafv2_web_acl_association" "web_acl_assoc" {
+  resource_arn = aws_lb.web_app_lb.arn # ARN Load Balancera
+  web_acl_arn  = aws_wafv2_web_acl.web_acl.arn
+}
+
+# Polityka Firewall
+resource "aws_networkfirewall_firewall_policy" "firewall_policy" {
+  name = "web-app-firewall-policy"
+
+  firewall_policy {
+    stateless_default_actions = ["aws:forward_to_sfe"]
+    stateless_fragment_default_actions = ["aws:forward_to_sfe"]
+
+    stateless_rule_group_reference {
+      resource_arn = aws_networkfirewall_rule_group.stateless_rule_group.arn
+      priority     = 1
+    }
+
+    stateful_rule_group_reference {
+      resource_arn = aws_networkfirewall_rule_group.stateful_rule_group.arn
+    }
+  }
+
+  tags = {
+    Name = "Web-App-FirewallPolicy"
+  }
+}
+
+resource "aws_security_group" "lb_sg" {
+  name_prefix = "alb-sg"
+  vpc_id      = "vpc-0c905a02a3119ed42"
+
+  ingress {
+    description = "Allow HTTPS traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Tymczasowo otwarte dla wszystkich
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "ALB-SecurityGroup"
+  }
+}
+# Grupa reguł Firewall
+resource "aws_networkfirewall_rule_group" "stateless_rule_group" {
+  capacity = 100
+  name     = "web-app-stateless-rule-group"
+  type     = "STATELESS"
+
+  rule_group {
+    rules_source {
+      stateless_rules_and_custom_actions {
+        stateless_rule {
+          priority = 100
+          rule_definition {
+            match_attributes {
+              destination_port {
+                from_port = 443
+                to_port   = 443
+              }
+              protocols = [6] # TCP
+            }
+            actions = ["aws:forward_to_sfe"]
+          }
+        }
+      }
+    }
+  }
+
+  tags = {
+    Name = "Web-App-StatelessRules"
+  }
+}
+
+resource "aws_networkfirewall_rule_group" "stateful_rule_group" {
+  capacity = 100
+  name     = "web-app-stateful-rule-group"
+  type     = "STATEFUL"
+
+  rule_group {
+    rules_source {
+      stateful_rule {
+        action = "DROP"
+        header {
+          protocol        = "TCP"
+          source          = "10.0.0.0/16"
+          source_port     = "ANY"
+          destination     = "10.0.1.0/24"
+          destination_port = "ANY"
+          direction       = "FORWARD"
+        }
+        rule_option {
+          keyword = "sid:1" # Przykładowa opcja z unikalnym identyfikatorem
+        }
+      }
+    }
+  }
+
+  tags = {
+    Name = "Web-App-StatefulRules"
+  }
+}
