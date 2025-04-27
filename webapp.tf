@@ -131,3 +131,47 @@ resource "aws_route_table_association" "private_route_assoc" {
   subnet_id      = aws_subnet.private_subnet.id
   route_table_id = aws_route_table.private_route_table.id
 }
+# Tworzenie AWS WAFv2 Web ACL
+resource "aws_wafv2_web_acl" "web_acl" {
+  name        = "web-app-waf"
+  scope       = "REGIONAL" # Używane dla ALB, API Gateway regionalnego lub App Runner
+  description = "Web ACL chroniący przed SQL Injection"
+  
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "BlockSQLInjection"
+    priority = 1
+    statement {
+      sqli_match_statement {
+        field_to_match {
+          uri_path {} # Sprawdzanie SQL Injection na poziomie ścieżki URI
+        }
+        text_transformation {
+          priority = 0
+          type     = "URL_DECODE"
+        }
+      }
+    }
+    action {
+      block {}
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "BlockSQLInjection"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "web-acl-metrics"
+    sampled_requests_enabled   = true
+  }
+
+  tags = {
+    Name = "Web-App-WAF"
+  }
+}
