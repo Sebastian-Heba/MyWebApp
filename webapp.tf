@@ -287,3 +287,73 @@ resource "aws_networkfirewall_rule_group" "stateful_rule_group" {
     Name = "Web-App-StatefulRules"
   }
 }
+# Dodanie application Load Balancer'a
+resource "aws_lb" "web_app_lb" {
+  name               = "web-app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.lb_sg.id]
+  subnets            = ["subnet-09d4821994bfbefb0"] # publiczna podsieć
+
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "Web-App-LoadBalancer"
+  }
+}
+# Listener dla HTTPS (port 443)
+resource "aws_lb_listener" "https_listener" {
+  load_balancer_arn = aws_lb.web_app_lb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = "arn:aws:acm:<region>:<account-id>:certificate/<certificate-id>"
+
+  default_action {
+    type = "forward"
+    target_group_arn = aws_lb_target_group.web_app_tg.arn
+  }
+}
+
+
+# Listener dla HTTP (port 80) - do przekierowania na HTTPS
+resource "aws_lb_listener" "http_redirect_listener" {
+  load_balancer_arn = aws_lb.web_app_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+    redirect {
+      protocol = "HTTPS"
+      port     = "443"
+      status_code = "HTTP_301"
+    }
+  }
+}
+# Target Group
+resource "aws_lb_target_group" "web_app_tg" {
+  name        = "web-app-target-group"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = "vpc-0c905a02a3119ed42"
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "Web-App-TargetGroup"
+  }
+}
+# Powiązanie instancji EC2 z ALB
+resource "aws_lb_target_group_attachment" "web_app_instance" {
+  target_group_arn = aws_lb_target_group.web_app_tg.arn
+  target_id        = aws_instance.app_nginx_server.id
+  port             = 80
+}
