@@ -175,3 +175,56 @@ resource "aws_wafv2_web_acl" "web_acl" {
     Name = "Web-App-WAF"
   }
 }
+# Powiązanie WAFv2 z Application Load Balancer
+resource "aws_wafv2_web_acl_association" "web_acl_assoc" {
+  resource_arn = aws_lb.web_app_lb.arn # ARN Load Balancera
+  web_acl_arn  = aws_wafv2_web_acl.web_acl.arn
+}
+
+# Polityka Firewall
+resource "aws_networkfirewall_firewall_policy" "firewall_policy" {
+  name = "web-app-firewall-policy"
+
+  firewall_policy {
+    stateless_default_actions = ["aws:forward_to_sfe"]
+    stateless_fragment_default_actions = ["aws:forward_to_sfe"]
+
+    stateless_rule_group_reference {
+      resource_arn = aws_networkfirewall_rule_group.stateless_rule_group.arn
+      priority     = 1
+    }
+
+    stateful_rule_group_reference {
+      resource_arn = aws_networkfirewall_rule_group.stateful_rule_group.arn
+    }
+  }
+
+  tags = {
+    Name = "Web-App-FirewallPolicy"
+  }
+}
+
+resource "aws_security_group" "lb_sg" {
+  name_prefix = "alb-sg"
+  vpc_id      = "vpc-0c905a02a3119ed42"
+
+  ingress {
+    description = "Allow HTTPS traffic"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Tymczasowo otwarte dla wszystkich
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "ALB-SecurityGroup"
+  }
+}
